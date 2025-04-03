@@ -6,6 +6,8 @@
 #include <map>
 #include <string>
 #include <stack>
+#include <fstream>
+#include <atomic>
 
 class Profiler {
 public:
@@ -51,6 +53,30 @@ public:
         for (const auto& [functionName, time] : results) {
             std::cout << "Function: " << functionName << " | Time: " << time << " ms\n";
         }
+        std::cout << "Total Allocated Memory: " << totalAllocated.load() << " bytes\n";
+    }
+
+    static void SaveResultsToFile(const std::string& filename) {
+        std::ofstream file(filename);
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open file " << filename << " for writing.\n";
+            return;
+        }
+        file << "Function,Time (ms)\n";
+        for (const auto& [functionName, time] : results) {
+            file << functionName << "," << time << "\n";
+        }
+        file << "Total Allocated Memory," << totalAllocated.load() << " bytes\n";
+        file.close();
+        std::cout << "Profiling results saved to " << filename << "\n";
+    }
+
+    static void AddAllocation(size_t size) {
+        totalAllocated.fetch_add(size, std::memory_order_relaxed);
+    }
+
+    static void RemoveAllocation(size_t size) {
+        totalAllocated.fetch_sub(size, std::memory_order_relaxed);
     }
 
 private:
@@ -59,6 +85,7 @@ private:
     static inline std::map<std::string, int> callDepth;
     static inline bool paused = false;
     static inline std::chrono::high_resolution_clock::time_point pauseStart;
+    static inline std::atomic<size_t> totalAllocated = 0;
 };
 
 class ScopedProfiler {
@@ -73,10 +100,21 @@ private:
     std::string functionName;
 };
 
+void* operator new(size_t size) {
+    Profiler::AddAllocation(size);
+    return malloc(size);
+}
+
+void operator delete(void* ptr, size_t size) noexcept {
+    Profiler::RemoveAllocation(size);
+    free(ptr);
+}
+
 #define START_PROFILING(name) Profiler::StartProfiling(name)
 #define END_PROFILING(name) Profiler::EndProfiling(name)
 #define SCOPED_PROFILING(name) ScopedProfiler profiler##__LINE__(name)
 #define PAUSE_PROFILING() Profiler::PauseProfiling()
 #define RESUME_PROFILING() Profiler::ResumeProfiling()
+#define SAVE_PROFILING_RESULTS(filename) Profiler::SaveResultsToFile(filename)
 
 #endif // PROFILER_H
