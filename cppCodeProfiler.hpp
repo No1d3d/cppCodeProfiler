@@ -34,7 +34,20 @@ private:
     static inline std::map<std::string, double> results;
 };
 
+class ScopedProfiler {
+public:
+    explicit ScopedProfiler(const std::string& name) : functionName(name) {
+        Profiler::StartProfiling(functionName);
+    }
+    ~ScopedProfiler() {
+        Profiler::EndProfiling(functionName);
+    }
+private:
+    std::string functionName;
+};
+
 #define START_PROFILING(name) Profiler::StartProfiling(name)
 #define END_PROFILING(name) Profiler::EndProfiling(name)
+#define SCOPED_PROFILING(name) ScopedProfiler profiler##__LINE__(name)
 
 #endif // PROFILER_H
