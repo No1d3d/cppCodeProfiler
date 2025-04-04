@@ -8,27 +8,30 @@
 #include <stack>
 #include <fstream>
 #include <atomic>
+#include <sstream>
 
 class Profiler {
 public:
-    static void StartProfiling(const std::string& functionName) {
+    static void StartProfiling(const std::string& functionName, const std::string& params) {
+        std::string fullFunctionName = functionName + "(" + params + ")";
         auto startTime = std::chrono::high_resolution_clock::now();
-        timestamps[functionName].push(startTime);
-        callDepth[functionName]++;
+        timestamps[fullFunctionName].push(startTime);
+        callDepth[fullFunctionName]++;
     }
 
-    static void EndProfiling(const std::string& functionName) {
+    static void EndProfiling(const std::string& functionName, const std::string& params) {
+        std::string fullFunctionName = functionName + "(" + params + ")";
         auto endTime = std::chrono::high_resolution_clock::now();
-        if (timestamps[functionName].empty()) return;
+        if (timestamps[fullFunctionName].empty()) return;
         
-        auto startTime = timestamps[functionName].top();
-        timestamps[functionName].pop();
+        auto startTime = timestamps[fullFunctionName].top();
+        timestamps[fullFunctionName].pop();
         
         auto duration = std::chrono::duration<double, std::milli>(endTime - startTime).count();
         if (!paused) {
-            results[functionName] += duration;
+            results[fullFunctionName] += duration;
         }
-        callDepth[functionName]--;
+        callDepth[fullFunctionName]--;
     }
 
     static void PauseProfiling() {
@@ -90,14 +93,15 @@ private:
 
 class ScopedProfiler {
 public:
-    explicit ScopedProfiler(const std::string& name) : functionName(name) {
-        Profiler::StartProfiling(functionName);
+    explicit ScopedProfiler(const std::string& name, const std::string& params = "") : functionName(name), params(params) {
+        Profiler::StartProfiling(functionName, params);
     }
     ~ScopedProfiler() {
-        Profiler::EndProfiling(functionName);
+        Profiler::EndProfiling(functionName, params);
     }
 private:
     std::string functionName;
+    std::string params;
 };
 
 void* operator new(size_t size) {
@@ -110,9 +114,9 @@ void operator delete(void* ptr, size_t size) noexcept {
     free(ptr);
 }
 
-#define START_PROFILING(name) Profiler::StartProfiling(name)
-#define END_PROFILING(name) Profiler::EndProfiling(name)
-#define SCOPED_PROFILING(name) ScopedProfiler profiler##__LINE__(name)
+#define START_PROFILING(name, params) Profiler::StartProfiling(name, params)
+#define END_PROFILING(name, params) Profiler::EndProfiling(name, params)
+#define SCOPED_PROFILING(name, params) ScopedProfiler profiler##__LINE__(name, params)
 #define PAUSE_PROFILING() Profiler::PauseProfiling()
 #define RESUME_PROFILING() Profiler::ResumeProfiling()
 #define SAVE_PROFILING_RESULTS(filename) Profiler::SaveResultsToFile(filename)
